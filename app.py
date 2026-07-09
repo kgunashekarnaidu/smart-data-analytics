@@ -393,7 +393,9 @@ def page_upload() -> None:
         "Drop your CSV file here",
         type=["csv"],
         help="Any CSV dataset. Column names and types are detected automatically.",
+        key="upload_dataset",
     )
+
 
     if uploaded is not None:
         try:

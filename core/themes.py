@@ -463,14 +463,29 @@ def build_app_css(theme: ThemeTokens) -> str:
     /* File uploader */
     [data-testid="stFileUploader"] section {{
         background: {theme.input_bg} !important;
-        border: 1px dashed {theme.input_border} !important;
-        border-radius: 10px !important;
+        border: 1.5px dashed {theme.accent} !important;
+        border-radius: 12px !important;
+        box-shadow: 0 0 0 3px rgba(77, 163, 255, 0.15);
+        padding: 10px 12px;
     }}
 
     [data-testid="stFileUploader"] section *,
-    [data-testid="stFileUploader"] small {{
+    [data-testid="stFileUploader"] small,
+    [data-testid="stFileUploader"] svg,
+    [data-testid="stFileUploader"] label {{
         color: {theme.input_text} !important;
+        fill: {theme.input_text} !important;
     }}
+
+    [data-testid="stFileUploader"] button {{
+        background: {theme.button_gradient} !important;
+        color: #ffffff !important;
+        border: none !important;
+        border-radius: 10px !important;
+        font-weight: 700 !important;
+        padding: 10px 18px !important;
+    }}
+
 
     /* Data tables */
     [data-testid="stDataFrame"],
