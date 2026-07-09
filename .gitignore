@@ -1,0 +1,45 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Virtual environments
+.env
+.venv/
+venv/
+ENV/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Streamlit
+.streamlit/secrets.toml
+
+# Generated artifacts and logs
+artifacts/*
+!artifacts/.gitkeep
+logs/*
+!logs/.gitkeep
+
+# Saved models (use artifacts/ instead)
+*.pkl
+*.joblib
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Data uploads (optional — keep local CSVs out of git)
+uploads/
