@@ -54,11 +54,3 @@ streamlit run app.py
 | —    | pages split & polish          | Optional   |
 
 Built from the `TASK_1.ipynb` retail inventory ML notebook, generalized for any CSV dataset.
-
-## Deploy to GitHub & Streamlit Cloud
-
-See **[DEPLOYMENT.md](DEPLOYMENT.md)** for step-by-step instructions to:
-
-1. Upload the project to GitHub
-2. Deploy free on [Streamlit Community Cloud](https://share.streamlit.io)
-3. Update the live app after code changes
