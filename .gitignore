@@ -43,3 +43,8 @@ Thumbs.db
 
 # Data uploads (optional — keep local CSVs out of git)
 uploads/
+
+# Grafana integration
+data/*.db
+grafana-storage/
+grafana/provisioning/datasources/postgres.yaml

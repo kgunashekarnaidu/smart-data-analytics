@@ -75,6 +75,8 @@ from core.utils import (
     suggest_target_column,
     to_csv_bytes,
 )
+from core.data_bridge import sync_pipeline_to_grafana, test_connection as test_pg_connection
+import streamlit.components.v1 as components
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -132,6 +134,9 @@ SESSION_DEFAULTS: dict[str, Any] = {
     "model_artifact_path": None,
     "input_columns": [],
     "ui_theme": "dark",
+    "grafana_synced": False,
+    "grafana_sync_result": None,
+    "pg_password": "admin123",
 }
 
 
@@ -225,6 +230,7 @@ NAV_ITEMS: dict[str, str] = {
     "🧹  Cleaning": "cleaning",
     "📊  EDA": "eda",
     "📈  Visualizations": "visualizations",
+    "📊  Grafana Dashboard": "grafana",
     "⚙️  Preprocessing": "preprocessing",
     "🤖  Machine Learning": "ml",
     "🔮  Predictions": "predictions",
@@ -1259,6 +1265,171 @@ def page_predictions() -> None:
         st.caption("Download the full results from the **Download Results** page.")
 
 
+def page_grafana() -> None:
+    """Grafana dashboard integration with live PostgreSQL sync."""
+    section_header("📊", "Grafana Dashboard")
+
+    theme = current_theme()
+
+    # --- Connection & Sync Controls ---
+    st.markdown(
+        """
+        Connect your pipeline data to **Grafana** for advanced, interactive dashboards.
+        Data is synced to PostgreSQL and Grafana queries it in real time.
+        """
+    )
+
+    col_status, col_actions = st.columns([1, 1])
+
+    with col_status:
+        st.markdown("### 🔌 PostgreSQL Connection")
+        password = st.session_state.pg_password
+        success, msg = test_pg_connection(password)
+        if success:
+            st.success(f"✅ {msg}")
+        else:
+            st.error(f"❌ {msg}")
+            st.caption(
+                "Make sure PostgreSQL is running. "
+                "Check pgAdmin 4 or run `pg_isready` in your terminal."
+            )
+            return
+
+    with col_actions:
+        st.markdown("### 🔄 Data Sync")
+        df = st.session_state.raw_df
+        if df is None:
+            st.warning("📂 Upload a dataset first to sync data to Grafana.")
+        else:
+            st.caption(
+                f"Dataset: **{st.session_state.dataset_name or 'uploaded.csv'}** "
+                f"({df.shape[0]:,} rows × {df.shape[1]} cols)"
+            )
+            if st.button("🚀 Sync Data to Grafana", use_container_width=True, key="grafana_sync_btn"):
+                try:
+                    with st.spinner("Syncing pipeline data to PostgreSQL…"):
+                        result = sync_pipeline_to_grafana(
+                            dict(st.session_state), password
+                        )
+                        st.session_state.grafana_synced = True
+                        st.session_state.grafana_sync_result = result
+
+                    synced_tables = [t for t, ok in result.items() if ok]
+                    skipped = [t for t, ok in result.items() if not ok]
+                    st.success(
+                        f"✅ Synced {len(synced_tables)} tables: "
+                        + ", ".join(f"`{t}`" for t in synced_tables)
+                    )
+                    if skipped:
+                        st.caption(
+                            "Skipped (no data yet): "
+                            + ", ".join(f"`{t}`" for t in skipped)
+                        )
+                except Exception as exc:
+                    st.error(f"❌ Sync failed: {exc}")
+                    logger.exception("Grafana sync failed")
+
+    # --- Sync status ---
+    if st.session_state.grafana_sync_result:
+        st.markdown("---")
+        result = st.session_state.grafana_sync_result
+        status_cols = st.columns(len(result))
+        for col, (table, ok) in zip(status_cols, result.items()):
+            col.metric(table, "✅ Synced" if ok else "⬜ Empty")
+
+    st.markdown("---")
+
+    # --- Grafana Embed ---
+    st.markdown("### 📊 Grafana Analytics Dashboard")
+
+    grafana_url = "http://localhost:3000"
+    dashboard_url = f"{grafana_url}/d/dataml-analytics/dataml-pro-analytics-dashboard?kiosk&refresh=10s"
+
+    if not st.session_state.grafana_synced:
+        st.info(
+            "👆 Click **Sync Data to Grafana** above to push your data, "
+            "then the dashboard will appear here."
+        )
+
+    tab_full, tab_panels, tab_direct = st.tabs(
+        ["Full Dashboard", "Individual Panels", "Open Grafana"]
+    )
+
+    with tab_full:
+        st.caption("Full Grafana dashboard embedded below. Scroll to explore all panels.")
+        components.iframe(
+            src=dashboard_url,
+            height=900,
+            scrolling=True,
+        )
+
+    with tab_panels:
+        st.caption("Individual panels for focused analysis.")
+        panel_col1, panel_col2 = st.columns(2)
+
+        panels = {
+            "📊 Model Comparison": 3,
+            "🎯 Feature Importance": 5,
+            "📈 Actual vs Predicted": 6,
+            "🏆 Model Leaderboard": 8,
+        }
+
+        solo_base = f"{grafana_url}/d-solo/dataml-analytics/dataml-pro-analytics-dashboard?orgId=1&kiosk&refresh=10s"
+        for idx, (label, panel_id) in enumerate(panels.items()):
+            with (panel_col1 if idx % 2 == 0 else panel_col2):
+                st.markdown(f"**{label}**")
+                components.iframe(
+                    src=f"{solo_base}&panelId={panel_id}",
+                    height=350,
+                    scrolling=True,
+                )
+
+    with tab_direct:
+        st.markdown(
+            f"""
+            ### 🌐 Open Grafana Directly
+
+            Access the full Grafana interface for advanced editing, custom queries, and more panels.
+
+            **URL:** [{grafana_url}]({grafana_url})
+
+            **Default login:** `admin` / `admin` (first-time only)
+
+            **Tips:**
+            - Create custom panels with SQL queries against your data tables
+            - Available tables: `raw_data`, `cleaned_data`, `processed_data`, `predictions`, `model_results`, `feature_importance`, `pipeline_metadata`
+            - Use Grafana's built-in alerting to monitor metric thresholds
+            """
+        )
+        if st.button("🔗 Open Grafana in New Tab", use_container_width=True):
+            st.markdown(
+                f'<meta http-equiv="refresh" content="0;url={grafana_url}">',
+                unsafe_allow_html=True,
+            )
+
+    # --- Setup instructions ---
+    with st.expander("🛠️ First-time Grafana setup", expanded=False):
+        st.markdown(
+            """
+            **If you haven't installed Grafana yet:**
+
+            1. Run the setup script in PowerShell (as Administrator):
+               ```powershell
+               .\\setup_grafana.ps1
+               ```
+            2. This will download, install, and configure Grafana automatically
+            3. Grafana will be available at `http://localhost:3000`
+            4. Default login: `admin` / `admin`
+
+            **After setup:**
+            - Upload a CSV in the **Upload Dataset** page
+            - Run cleaning/preprocessing as needed
+            - Come back here and click **Sync Data to Grafana**
+            - The dashboard will auto-populate with your data!
+            """
+        )
+
+
 def page_download() -> None:
     """Download cleaned data, predictions, and saved models."""
     section_header("⬇️", "Download Results")
@@ -1317,6 +1488,7 @@ PAGE_HANDLERS: dict[str, Callable[[], None]] = {
     "cleaning": page_cleaning,
     "eda": page_eda,
     "visualizations": page_visualizations,
+    "grafana": page_grafana,
     "preprocessing": page_preprocessing,
     "ml": page_ml,
     "predictions": page_predictions,

@@ -1,0 +1,11 @@
+apiVersion: 1
+
+providers:
+  - name: 'dataml_dashboards'
+    orgId: 1
+    folder: 'DataML'
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 10
+    options:
+      path: 'C:/Program Files/GrafanaLabs/grafana/public/dashboards/dataml'
