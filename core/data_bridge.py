@@ -353,12 +353,7 @@ def sync_pipeline_to_grafana(
     Main function called from Streamlit UI.
     Syncs all available pipeline stages, computed statistics, and metadata
     to PostgreSQL for Grafana consumption.
-    """
-    host = kwargs.get("host", host)
-    port = kwargs.get("port", port)
-    user = kwargs.get("user", user)
-    database = kwargs.get("database", database)
-    
+
     Args:
         session_state (dict[str, Any]): Streamlit session state dict
         password (str): PostgreSQL password
@@ -370,6 +365,10 @@ def sync_pipeline_to_grafana(
     Returns:
         dict[str, bool]: Dictionary indicating which tables were successfully synced
     """
+    host = kwargs.get("host", host)
+    port = kwargs.get("port", port)
+    user = kwargs.get("user", user)
+    database = kwargs.get("database", database)
     result = {}
     ensure_database(password, host=host, port=port, user=user, database=database)
     
