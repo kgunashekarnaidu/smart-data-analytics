@@ -145,9 +145,31 @@ SESSION_DEFAULTS: dict[str, Any] = {
 
 def init_session_state() -> None:
     """Initialize all session-state keys with safe defaults."""
+    import os
     for key, default in SESSION_DEFAULTS.items():
         if key not in st.session_state:
             st.session_state[key] = default
+
+    # Overrides for Cloud Deployment (Streamlit Secrets / ENV vars)
+    if "PGHOST" in os.environ:
+        st.session_state.pg_host = os.environ["PGHOST"]
+    elif hasattr(st, "secrets") and "PGHOST" in st.secrets:
+        st.session_state.pg_host = st.secrets["PGHOST"]
+
+    if "PGUSER" in os.environ:
+        st.session_state.pg_user = os.environ["PGUSER"]
+    elif hasattr(st, "secrets") and "PGUSER" in st.secrets:
+        st.session_state.pg_user = st.secrets["PGUSER"]
+
+    if "PGPASSWORD" in os.environ:
+        st.session_state.pg_password = os.environ["PGPASSWORD"]
+    elif hasattr(st, "secrets") and "PGPASSWORD" in st.secrets:
+        st.session_state.pg_password = st.secrets["PGPASSWORD"]
+
+    if "PGDATABASE" in os.environ:
+        st.session_state.pg_database = os.environ["PGDATABASE"]
+    elif hasattr(st, "secrets") and "PGDATABASE" in st.secrets:
+        st.session_state.pg_database = st.secrets["PGDATABASE"]
 
 
 def reset_pipeline_state() -> None:
