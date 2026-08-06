@@ -28,11 +28,15 @@ DEFAULT_DB = "dataml_pro"
 
 _engines: dict[str, Engine] = {}
 
-def get_engine(password: str, host=DEFAULT_HOST, port=DEFAULT_PORT, user=DEFAULT_USER, database=DEFAULT_DB) -> Engine:
+def get_engine(password: str = "", host=DEFAULT_HOST, port=DEFAULT_PORT, user=DEFAULT_USER, database=DEFAULT_DB, **kwargs: Any) -> Engine:
     """
     Creates SQLAlchemy engine with postgresql+psycopg2:// URL.
     Supports sslmode=require for cloud PostgreSQL providers (Neon, Supabase, Render).
     """
+    host = kwargs.get("host", host)
+    port = kwargs.get("port", port)
+    user = kwargs.get("user", user)
+    database = kwargs.get("database", database)
     engine_key = f"{host}:{port}:{user}:{database}"
     if engine_key not in _engines:
         ssl_param = "?sslmode=require" if host not in ("localhost", "127.0.0.1") else ""
@@ -41,11 +45,15 @@ def get_engine(password: str, host=DEFAULT_HOST, port=DEFAULT_PORT, user=DEFAULT
         _engines[engine_key] = engine
     return _engines[engine_key]
 
-def ensure_database(password: str, host=DEFAULT_HOST, port=DEFAULT_PORT, user=DEFAULT_USER, database=DEFAULT_DB) -> None:
+def ensure_database(password: str = "", host=DEFAULT_HOST, port=DEFAULT_PORT, user=DEFAULT_USER, database=DEFAULT_DB, **kwargs: Any) -> None:
     """
     Connects to PostgreSQL and creates the target database if it doesn't exist.
     Catches permission errors for cloud databases with pre-created databases.
     """
+    host = kwargs.get("host", host)
+    port = kwargs.get("port", port)
+    user = kwargs.get("user", user)
+    database = kwargs.get("database", database)
     try:
         ssl_param = "?sslmode=require" if host not in ("localhost", "127.0.0.1") else ""
         default_db = "postgres" if database != "neondb" else "neondb"
@@ -334,16 +342,22 @@ def _build_model_metrics_detail(results_df: pd.DataFrame) -> pd.DataFrame:
 
 def sync_pipeline_to_grafana(
     session_state: dict[str, Any],
-    password: str,
+    password: str = "",
     host: str = DEFAULT_HOST,
     port: int = DEFAULT_PORT,
     user: str = DEFAULT_USER,
     database: str = DEFAULT_DB,
+    **kwargs: Any,
 ) -> dict[str, bool]:
     """
     Main function called from Streamlit UI.
     Syncs all available pipeline stages, computed statistics, and metadata
     to PostgreSQL for Grafana consumption.
+    """
+    host = kwargs.get("host", host)
+    port = kwargs.get("port", port)
+    user = kwargs.get("user", user)
+    database = kwargs.get("database", database)
     
     Args:
         session_state (dict[str, Any]): Streamlit session state dict
@@ -516,11 +530,14 @@ def sync_pipeline_to_grafana(
         
     return result
 
-def test_connection(password: str, host=DEFAULT_HOST, port=DEFAULT_PORT, user=DEFAULT_USER) -> tuple[bool, str]:
+def test_connection(password: str = "", host=DEFAULT_HOST, port=DEFAULT_PORT, user=DEFAULT_USER, **kwargs: Any) -> tuple[bool, str]:
     """
     Tests if PostgreSQL is reachable.
     Supports sslmode=require for cloud PostgreSQL hosts.
     """
+    host = kwargs.get("host", host)
+    port = kwargs.get("port", port)
+    user = kwargs.get("user", user)
     try:
         ssl_param = "?sslmode=require" if host not in ("localhost", "127.0.0.1") else ""
         default_db = "neondb" if "neon" in host.lower() else "postgres"
