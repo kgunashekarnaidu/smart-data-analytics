@@ -136,6 +136,9 @@ SESSION_DEFAULTS: dict[str, Any] = {
     "ui_theme": "dark",
     "grafana_synced": False,
     "grafana_sync_result": None,
+    "pg_host": "localhost",
+    "pg_port": 5432,
+    "pg_user": "postgres",
     "pg_password": "admin123",
 }
 
@@ -1283,15 +1286,36 @@ def page_grafana() -> None:
 
     with col_status:
         st.markdown("### 🔌 PostgreSQL Connection")
+        
+        with st.expander("⚙️ Connection Settings", expanded=False):
+            cfg_col1, cfg_col2 = st.columns(2)
+            with cfg_col1:
+                host_input = st.text_input("Host", value=st.session_state.pg_host, key="pg_host_input")
+                user_input = st.text_input("User", value=st.session_state.pg_user, key="pg_user_input")
+            with cfg_col2:
+                port_input = st.number_input("Port", value=int(st.session_state.pg_port), min_value=1, max_value=65535, key="pg_port_input")
+                password_input = st.text_input("Password", value=st.session_state.pg_password, type="password", key="pg_password_input")
+            
+            st.session_state.pg_host = host_input
+            st.session_state.pg_port = port_input
+            st.session_state.pg_user = user_input
+            st.session_state.pg_password = password_input
+
+        host = st.session_state.pg_host
+        port = int(st.session_state.pg_port)
+        user = st.session_state.pg_user
         password = st.session_state.pg_password
-        success, msg = test_pg_connection(password)
+
+        success, msg = test_pg_connection(password, host=host, port=port, user=user)
         if success:
-            st.success(f"✅ {msg}")
+            st.success(f"✅ {msg} ({user}@{host}:{port})")
         else:
             st.error(f"❌ {msg}")
-            st.caption(
-                "Make sure PostgreSQL is running. "
-                "Check pgAdmin 4 or run `pg_isready` in your terminal."
+            st.warning(
+                "💡 **Important Note on Streamlit Cloud:**\n"
+                "If you are viewing this app deployed online (e.g. `share.streamlit.io`), `localhost` refers to Streamlit's cloud server — NOT your local PC.\n\n"
+                "- **To connect to your PC's PostgreSQL & Grafana**: Run the app locally on your machine using `streamlit run app.py`.\n"
+                "- **To connect to a Cloud PostgreSQL**: Expand ⚙️ **Connection Settings** above and enter your cloud database Host, Port, User, and Password."
             )
             return
 
@@ -1309,7 +1333,11 @@ def page_grafana() -> None:
                 try:
                     with st.spinner("Syncing pipeline data to PostgreSQL…"):
                         result = sync_pipeline_to_grafana(
-                            dict(st.session_state), password
+                            dict(st.session_state),
+                            password=password,
+                            host=host,
+                            port=port,
+                            user=user,
                         )
                         st.session_state.grafana_synced = True
                         st.session_state.grafana_sync_result = result
@@ -1359,28 +1387,61 @@ def page_grafana() -> None:
         st.caption("Full Grafana dashboard embedded below. Scroll to explore all panels.")
         components.iframe(
             src=dashboard_url,
-            height=900,
+            height=1600,
             scrolling=True,
         )
 
     with tab_panels:
-        st.caption("Individual panels for focused analysis.")
-        panel_col1, panel_col2 = st.columns(2)
-
-        panels = {
-            "📊 Model Comparison": 3,
-            "🎯 Feature Importance": 5,
-            "📈 Actual vs Predicted": 6,
-            "🏆 Model Leaderboard": 8,
-        }
+        st.caption("Individual panels for focused analysis. Select a category to explore.")
 
         solo_base = f"{grafana_url}/d-solo/dataml-analytics/dataml-pro-analytics-dashboard?orgId=1&kiosk&refresh=10s"
+
+        panel_categories = {
+            "🏠 Executive Summary": {
+                "📊 Pipeline Key Metrics": 1,
+                "🎯 Best Model Score": 2,
+                "💎 Data Quality Score": 9,
+                "📋 Pipeline Stage Progress": 10,
+            },
+            "🤖 Model Analytics": {
+                "📊 Model Comparison": 3,
+                "📋 Model Metrics Detail": 11,
+                "📉 Prediction Error Distribution": 12,
+                "🏆 Model Leaderboard": 8,
+            },
+            "📊 Feature & Data Analysis": {
+                "🎯 Feature Importance": 5,
+                "🍩 Data Composition": 4,
+                "🔥 Correlation Heatmap": 13,
+                "📋 Column Statistics": 14,
+            },
+            "🔍 Data Quality & Distributions": {
+                "⚠️ Missing Data by Column": 15,
+                "📊 Data Distribution": 16,
+            },
+            "🎯 Predictions Deep-Dive": {
+                "📈 Actual vs Predicted": 6,
+                "🎯 Residual vs Predicted": 17,
+                "📉 Prediction Confidence Band": 18,
+            },
+        }
+
+        category = st.selectbox(
+            "Panel Category",
+            list(panel_categories.keys()),
+            key="grafana_panel_category",
+        )
+
+        panels = panel_categories[category]
+        panel_col1, panel_col2 = st.columns(2)
+
         for idx, (label, panel_id) in enumerate(panels.items()):
             with (panel_col1 if idx % 2 == 0 else panel_col2):
                 st.markdown(f"**{label}**")
+                panel_height = 450 if panel_id in (13, 14, 18) else 350
                 components.iframe(
                     src=f"{solo_base}&panelId={panel_id}",
-                    height=350,
+                    height=panel_height,
                     scrolling=True,
                 )
 
@@ -1397,8 +1458,9 @@ def page_grafana() -> None:
 
             **Tips:**
             - Create custom panels with SQL queries against your data tables
-            - Available tables: `raw_data`, `cleaned_data`, `processed_data`, `predictions`, `model_results`, `feature_importance`, `pipeline_metadata`
+            - Available tables: `raw_data`, `cleaned_data`, `processed_data`, `predictions`, `model_results`, `feature_importance`, `pipeline_metadata`, `column_statistics`, `correlation_matrix`, `missing_data_summary`, `model_metrics_detail`, `prediction_residuals`, `data_distribution`
             - Use Grafana's built-in alerting to monitor metric thresholds
+            - The dashboard has **18 panels** across 5 organized sections
             """
         )
         if st.button("🔗 Open Grafana in New Tab", use_container_width=True):

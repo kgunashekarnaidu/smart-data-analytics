@@ -8,4 +8,7 @@ providers:
     disableDeletion: false
     updateIntervalSeconds: 10
     options:
-      path: 'C:/Program Files/GrafanaLabs/grafana/public/dashboards/dataml'
+      path: '/var/lib/grafana/dashboards/dataml'
+
+
+
