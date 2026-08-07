@@ -1547,7 +1547,14 @@ def page_grafana() -> None:
         render_native_grafana_dashboard()
 
     with tab_full:
-        grafana_url = st.text_input("Grafana Server URL", value="http://localhost:3000", key="grafana_embed_url")
+        default_grafana = "http://localhost:3000"
+        try:
+            if hasattr(st, "secrets") and "GRAFANA_URL" in st.secrets:
+                default_grafana = st.secrets["GRAFANA_URL"]
+        except Exception:
+            pass
+
+        grafana_url = st.text_input("Grafana Server URL", value=default_grafana, key="grafana_embed_url")
         dashboard_url = f"{grafana_url}/d/dataml-analytics?kiosk&refresh=10s"
 
         st.warning(
@@ -1564,7 +1571,13 @@ def page_grafana() -> None:
         )
 
     with tab_panels:
-        grafana_url = st.session_state.get("grafana_embed_url", "http://localhost:3000")
+        grafana_url = st.session_state.get("grafana_embed_url", default_grafana)
+        st.warning(
+            "💡 **Note for Online / Mentor Viewers:**\n\n"
+            "- If accessing this app online via **Streamlit Cloud**, `http://localhost:3000` attempts to connect to **your local machine**'s port 3000.\n"
+            "- If Grafana is not running locally on your computer, browsers display `localhost refused to connect`.\n"
+            "- For instant interactive visualizations without running local Grafana, please use the **✨ Live Analytics (Built-in)** tab!"
+        )
         st.caption("Individual Grafana panels (requires running local/cloud Grafana instance).")
 
         solo_base = f"{grafana_url}/d-solo/dataml-analytics?orgId=1&kiosk&refresh=10s"
@@ -1619,7 +1632,7 @@ def page_grafana() -> None:
                 )
 
     with tab_direct:
-        grafana_url = st.session_state.get("grafana_embed_url", "http://localhost:3000")
+        grafana_url = st.session_state.get("grafana_embed_url", default_grafana)
         st.markdown(
             f"""
             ### 🌐 Open Grafana Directly
