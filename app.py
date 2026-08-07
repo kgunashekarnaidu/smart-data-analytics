@@ -1344,17 +1344,116 @@ def page_predictions() -> None:
         st.caption("Download the full results from the **Download Results** page.")
 
 
+def render_native_grafana_dashboard() -> None:
+    """Render a native Plotly/Streamlit interactive analytics dashboard matching Grafana panels."""
+    theme = current_theme()
+    df = active_dataframe()
+
+    if df is None:
+        st.info("📂 Please upload a CSV dataset on the **Upload Dataset** page to unlock live analytics charts.")
+        return
+
+    st.markdown("### 🏠 Executive Summary & Pipeline Metrics")
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.metric("Total Rows", f"{len(df):,}")
+    with col2:
+        st.metric("Total Columns", f"{len(df.columns)}")
+    with col3:
+        missing_count = int(df.isnull().sum().sum())
+        st.metric("Missing Values", f"{missing_count:,}")
+    with col4:
+        best_model = st.session_state.get("best_model_name") or "Not Trained"
+        st.metric("Best Model", best_model)
+
+    st.markdown("---")
+
+    results_df = st.session_state.get("results_df")
+    if results_df is not None and not results_df.empty:
+        st.markdown("### 🤖 Model Analytics & Leaderboard")
+        col_m1, col_m2 = st.columns([1, 1])
+        with col_m1:
+            problem_type = st.session_state.get("problem_type") or "regression"
+            primary_metric = "R2" if problem_type == "regression" else "F1"
+            if primary_metric in results_df.columns:
+                fig = px.bar(
+                    results_df,
+                    x="Model",
+                    y=primary_metric,
+                    color="Model",
+                    text=primary_metric,
+                    title=f"Model Performance ({primary_metric})",
+                    color_discrete_sequence=list(theme.chart_palette),
+                )
+                fig.update_traces(texttemplate="%{text:.4f}", textposition="outside")
+                fig.update_layout(showlegend=False)
+                style_bar_trace(fig, opacity=0.92)
+                apply_plotly_theme(fig)
+                st.plotly_chart(fig, use_container_width=True)
+        with col_m2:
+            st.markdown("**🏆 Leaderboard Data Table**")
+            st.dataframe(results_df, use_container_width=True)
+        st.markdown("---")
+
+    st.markdown("### 📊 Feature & Data Analysis")
+    col_f1, col_f2 = st.columns(2)
+    with col_f1:
+        importance = st.session_state.get("feature_importance")
+        if importance is not None and not importance.empty:
+            st.markdown("**🎯 Top 15 Feature Importances**")
+            top_imp = importance.head(15)
+            fig_imp = px.bar(
+                top_imp,
+                x="Importance",
+                y="Feature",
+                orientation="h",
+                color_discrete_sequence=[theme.chart_primary],
+            )
+            style_bar_trace(fig_imp)
+            fig_imp.update_layout(yaxis={"categoryorder": "total ascending"}, showlegend=False)
+            apply_plotly_theme(fig_imp)
+            st.plotly_chart(fig_imp, use_container_width=True)
+        else:
+            st.info("💡 Train models on the **Machine Learning** page to view feature importances.")
+    with col_f2:
+        num_cols = get_numeric_columns(df)
+        if len(num_cols) >= 2:
+            st.markdown("**🔥 Correlation Heatmap**")
+            max_c = min(12, len(num_cols))
+            fig_corr = plot_correlation_heatmap(df, num_cols[:max_c])
+            st.plotly_chart(fig_corr, use_container_width=True)
+        else:
+            st.info("💡 Need at least 2 numeric columns for a correlation heatmap.")
+
+    training_result = st.session_state.get("training_result")
+    if training_result is not None and st.session_state.get("X_test") is not None:
+        st.markdown("---")
+        st.markdown("### 📈 Predictions & Error Analysis")
+        from core.preprocessor import model_requires_scaling
+        use_scaled = model_requires_scaling(training_result.best_model_name)
+        X_eval = st.session_state.X_test if use_scaled else st.session_state.X_test_raw
+        y_true = st.session_state.y_test
+        y_pred = training_result.best_model.predict(X_eval)
+        if training_result.target_encoder is not None:
+            y_pred = training_result.target_encoder.inverse_transform(y_pred.astype(int))
+
+        n_pts = min(150, len(y_true))
+        comp_df = pd.DataFrame({"Actual": y_true[:n_pts], "Predicted": y_pred[:n_pts]})
+        fig_pred = px.line(comp_df, title="Actual vs Predicted (Test Sample)")
+        apply_plotly_theme(fig_pred)
+        st.plotly_chart(fig_pred, use_container_width=True)
+
+
 def page_grafana() -> None:
-    """Grafana dashboard integration with live PostgreSQL sync."""
-    section_header("📊", "Grafana Dashboard")
+    """Grafana dashboard integration with live PostgreSQL sync and native fallback."""
+    section_header("📊", "Grafana & Live Analytics Dashboard")
 
     theme = current_theme()
 
     # --- Connection & Sync Controls ---
     st.markdown(
         """
-        Connect your pipeline data to **Grafana** for advanced, interactive dashboards.
-        Data is synced to PostgreSQL and Grafana queries it in real time.
+        Explore live analytics using our **built-in interactive dashboard** or sync your data to **Grafana** via PostgreSQL.
         """
     )
 
@@ -1386,26 +1485,22 @@ def page_grafana() -> None:
         if success:
             st.success(f"✅ {msg} ({user}@{host}:{port})")
         else:
-            st.error(f"❌ {msg}")
-            st.warning(
-                "💡 **Important Note on Streamlit Cloud:**\n"
-                "If you are viewing this app deployed online (e.g. `share.streamlit.io`), `localhost` refers to Streamlit's cloud server — NOT your local PC.\n\n"
-                "- **To connect to your PC's PostgreSQL & Grafana**: Run the app locally on your machine using `streamlit run app.py`.\n"
-                "- **To connect to a Cloud PostgreSQL**: Expand ⚙️ **Connection Settings** above and enter your cloud database Host, Port, User, and Password."
+            st.info(
+                f"ℹ️ PostgreSQL Status: {msg} ({user}@{host}:{port})\n\n"
+                "*(PostgreSQL sync is optional. The **✨ Live Analytics (Built-in)** tab below works everywhere!)*"
             )
-            return
 
     with col_actions:
         st.markdown("### 🔄 Data Sync")
         df = st.session_state.raw_df
         if df is None:
-            st.warning("📂 Upload a dataset first to sync data to Grafana.")
+            st.info("📂 Upload a dataset first to enable PostgreSQL sync.")
         else:
             st.caption(
                 f"Dataset: **{st.session_state.dataset_name or 'uploaded.csv'}** "
                 f"({df.shape[0]:,} rows × {df.shape[1]} cols)"
             )
-            if st.button("🚀 Sync Data to Grafana", use_container_width=True, key="grafana_sync_btn"):
+            if st.button("🚀 Sync Data to Grafana / PostgreSQL", use_container_width=True, key="grafana_sync_btn"):
                 try:
                     with st.spinner("Syncing pipeline data to PostgreSQL…"):
                         result = sync_pipeline_to_grafana(
@@ -1443,32 +1538,34 @@ def page_grafana() -> None:
 
     st.markdown("---")
 
-    # --- Grafana Embed ---
-    st.markdown("### 📊 Grafana Analytics Dashboard")
-
-    grafana_url = "http://localhost:3000"
-    dashboard_url = f"{grafana_url}/d/dataml-analytics/dataml-pro-analytics-dashboard?kiosk&refresh=10s"
-
-    if not st.session_state.grafana_synced:
-        st.info(
-            "👆 Click **Sync Data to Grafana** above to push your data, "
-            "then the dashboard will appear here."
-        )
-
-    tab_full, tab_panels, tab_direct = st.tabs(
-        ["Full Dashboard", "Individual Panels", "Open Grafana"]
+    # --- Analytics Tabs ---
+    tab_native, tab_full, tab_panels, tab_direct = st.tabs(
+        ["✨ Live Analytics (Built-in)", "📊 Embedded Grafana", "📌 Individual Grafana Panels", "🌐 Open Grafana Directly"]
     )
 
+    with tab_native:
+        render_native_grafana_dashboard()
+
     with tab_full:
-        st.caption("Full Grafana dashboard embedded below. Scroll to explore all panels.")
+        grafana_url = st.text_input("Grafana Server URL", value="http://localhost:3000", key="grafana_embed_url")
+        dashboard_url = f"{grafana_url}/d/dataml-analytics/dataml-pro-analytics-dashboard?kiosk&refresh=10s"
+
+        st.warning(
+            "💡 **Note on Browser Iframe Security & Grafana:**\n\n"
+            "- If you are accessing this app over **HTTPS** (e.g. Streamlit Cloud), web browsers block embedding `http://localhost:3000` (mixed content rule), showing a blank iframe.\n"
+            "- To view embedded Grafana, run the app locally (`streamlit run app.py`) or configure an HTTPS Grafana server URL above.\n"
+            "- Otherwise, use the **✨ Live Analytics (Built-in)** tab for instant charts!"
+        )
+
         components.iframe(
             src=dashboard_url,
-            height=1600,
+            height=1200,
             scrolling=True,
         )
 
     with tab_panels:
-        st.caption("Individual panels for focused analysis. Select a category to explore.")
+        grafana_url = st.session_state.get("grafana_embed_url", "http://localhost:3000")
+        st.caption("Individual Grafana panels (requires running local/cloud Grafana instance).")
 
         solo_base = f"{grafana_url}/d-solo/dataml-analytics/dataml-pro-analytics-dashboard?orgId=1&kiosk&refresh=10s"
 
@@ -1522,6 +1619,7 @@ def page_grafana() -> None:
                 )
 
     with tab_direct:
+        grafana_url = st.session_state.get("grafana_embed_url", "http://localhost:3000")
         st.markdown(
             f"""
             ### 🌐 Open Grafana Directly
@@ -1536,7 +1634,6 @@ def page_grafana() -> None:
             - Create custom panels with SQL queries against your data tables
             - Available tables: `raw_data`, `cleaned_data`, `processed_data`, `predictions`, `model_results`, `feature_importance`, `pipeline_metadata`, `column_statistics`, `correlation_matrix`, `missing_data_summary`, `model_metrics_detail`, `prediction_residuals`, `data_distribution`
             - Use Grafana's built-in alerting to monitor metric thresholds
-            - The dashboard has **18 panels** across 5 organized sections
             """
         )
         if st.button("🔗 Open Grafana in New Tab", use_container_width=True):
@@ -1563,7 +1660,6 @@ def page_grafana() -> None:
             - Upload a CSV in the **Upload Dataset** page
             - Run cleaning/preprocessing as needed
             - Come back here and click **Sync Data to Grafana**
-            - The dashboard will auto-populate with your data!
             """
         )
 
