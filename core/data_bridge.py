@@ -37,7 +37,10 @@ def get_engine(password: str = "", host=DEFAULT_HOST, port=DEFAULT_PORT, user=DE
     port = kwargs.get("port", port)
     user = kwargs.get("user", user)
     database = kwargs.get("database", database)
-    engine_key = f"{host}:{port}:{user}:{database}"
+    # Include a hash of the password so credential changes trigger a new engine
+    import hashlib
+    pw_hash = hashlib.sha256(password.encode()).hexdigest()[:8]
+    engine_key = f"{host}:{port}:{user}:{database}:{pw_hash}"
     if engine_key not in _engines:
         ssl_param = "?sslmode=require" if host not in ("localhost", "127.0.0.1") else ""
         url = f"postgresql+psycopg2://{user}:{password}@{host}:{port}/{database}{ssl_param}"
@@ -70,8 +73,7 @@ def ensure_database(password: str = "", host=DEFAULT_HOST, port=DEFAULT_PORT, us
             else:
                 logger.info(f"Database {database} already exists.")
     except Exception as e:
-        logger.warning(f"Database check warning for {database}: {e}")
-        logger.error(f"Failed to ensure database {database}: {e}")
+        logger.warning(f"Database check/create skipped for '{database}': {e}")
 
 def save_dataframe(df: pd.DataFrame, table_name: str, engine: Engine, if_exists: str = 'replace') -> int:
     """

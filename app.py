@@ -140,6 +140,7 @@ SESSION_DEFAULTS: dict[str, Any] = {
     "pg_port": 5432,
     "pg_user": "postgres",
     "pg_password": "admin123",
+    "pg_database": "dataml_pro",
 }
 
 
@@ -985,11 +986,38 @@ def page_ml() -> None:
                 "(price, rating, sales, etc.)."
             )
 
+    # ── Training options ────────────────────────────────────────────────────
+    cv_folds = 3  # default; overridden by the slider below when expanded
+    with st.expander("⚙️ Training options", expanded=False):
+        cv_folds = st.slider(
+            "Cross-validation folds",
+            min_value=2,
+            max_value=5,
+            value=3,
+            help=(
+                "More folds = more reliable CV scores but slower training. "
+                "3 folds is a good balance of speed and accuracy."
+            ),
+        )
+        st.caption(
+            "ℹ️ Models trained: Linear/Logistic Regression, Decision Tree, "
+            "Random Forest, Gradient Boosting (fast: 50 trees + early stopping), XGBoost"
+        )
+
     if st.button("🚀 Train All Models", use_container_width=True):
         try:
-            progress = st.progress(0)
-            status = st.empty()
-            status.info("⏳ Training models — this may take 1–3 minutes on large datasets…")
+            total_models = 5
+            progress_bar = st.progress(0.0)
+            status_box = st.empty()
+
+            def _on_model_progress(idx: int, total: int, model_name: str) -> None:
+                frac = idx / total
+                progress_bar.progress(frac)
+                status_box.info(
+                    f"⏳ Training model {idx + 1}/{total}: **{model_name}**…"
+                )
+
+            status_box.info("⏳ Starting model training…")
 
             training_result = train_all_models(
                 st.session_state.X_train,
@@ -1000,6 +1028,8 @@ def page_ml() -> None:
                 st.session_state.X_test_raw,
                 problem_type=problem_type,
                 feature_names=st.session_state.feature_cols,
+                cv_folds=cv_folds,
+                progress_callback=_on_model_progress,
             )
 
             artifact_path = save_training_artifacts(
@@ -1022,8 +1052,8 @@ def page_ml() -> None:
             st.session_state.feature_importance = training_result.feature_importance
             st.session_state.model_artifact_path = artifact_path
 
-            progress.progress(1.0)
-            status.success(f"✅ Best model: **{training_result.best_model_name}**")
+            progress_bar.progress(1.0)
+            status_box.success(f"✅ Best model: **{training_result.best_model_name}**")
             st.rerun()
         except Exception as exc:
             st.error(f"❌ Training failed: {exc}")

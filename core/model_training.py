@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 import joblib
 import numpy as np
@@ -48,7 +48,7 @@ from core.utils import (
 logger = get_logger("model_training")
 
 ARTIFACTS_DIR = Path("artifacts")
-DEFAULT_CV_FOLDS = 5
+DEFAULT_CV_FOLDS = 3  # Reduced from 5 to speed up training (user can override in UI)
 
 
 @dataclass
@@ -109,6 +109,11 @@ def get_regression_estimators() -> dict[str, Any]:
             n_jobs=-1,
         ),
         "Gradient Boosting": GradientBoostingRegressor(
+            n_estimators=50,          # Reduced from 100 for speed
+            max_depth=4,              # Limit depth (default is 3, but explicit is faster)
+            subsample=0.8,            # Stochastic boosting — much faster on large data
+            n_iter_no_change=10,      # Early stopping: halt if no improvement for 10 rounds
+            validation_fraction=0.1,  # Hold-out fraction for early stopping
             random_state=RANDOM_STATE,
         ),
         "XGBoost": XGBRegressor(
@@ -133,7 +138,14 @@ def get_classification_estimators() -> dict[str, Any]:
             random_state=RANDOM_STATE,
             n_jobs=-1,
         ),
-        "Gradient Boosting": GradientBoostingClassifier(random_state=RANDOM_STATE),
+        "Gradient Boosting": GradientBoostingClassifier(
+            n_estimators=50,          # Reduced from 100 for speed
+            max_depth=4,
+            subsample=0.8,            # Stochastic boosting — much faster on large data
+            n_iter_no_change=10,      # Early stopping
+            validation_fraction=0.1,
+            random_state=RANDOM_STATE,
+        ),
         "XGBoost": XGBClassifier(
             n_estimators=100,
             random_state=RANDOM_STATE,
@@ -213,14 +225,18 @@ def extract_feature_importance(
 
 
 def _rank_results(results_df: pd.DataFrame, problem_type: ProblemType) -> pd.DataFrame:
-    """Sort models best-first depending on task type."""
+    """Sort models best-first depending on task type.
+
+    Guards against missing metric columns (e.g. ROC AUC absent when all values are NaN).
+    """
     if problem_type == ProblemType.REGRESSION:
-        return results_df.sort_values(["R2", "RMSE"], ascending=[False, True]).reset_index(
-            drop=True
-        )
-    return results_df.sort_values(
-        ["F1", "Accuracy", "ROC AUC"], ascending=[False, False, False]
-    ).reset_index(drop=True)
+        sort_cols = [c for c in ["R2", "RMSE"] if c in results_df.columns]
+        ascending = [False, True][: len(sort_cols)]
+        return results_df.sort_values(sort_cols, ascending=ascending).reset_index(drop=True)
+    # Classification — prefer F1, then Accuracy, then ROC AUC (if present)
+    sort_cols = [c for c in ["F1", "Accuracy", "ROC AUC"] if c in results_df.columns]
+    ascending = [False] * len(sort_cols)
+    return results_df.sort_values(sort_cols, ascending=ascending).reset_index(drop=True)
 
 
 def train_all_models(
@@ -234,6 +250,7 @@ def train_all_models(
     problem_type: ProblemType,
     feature_names: list[str],
     cv_folds: int = DEFAULT_CV_FOLDS,
+    progress_callback: Callable[[int, int, str], None] | None = None,
 ) -> TrainingResult:
     """
     Train and compare all models for regression or classification.
@@ -247,7 +264,9 @@ def train_all_models(
         X_test_raw: Unscaled test features for tree models.
         problem_type: Regression or classification task.
         feature_names: Ordered feature names.
-        cv_folds: Cross-validation fold count.
+        cv_folds: Cross-validation fold count (default 3 — use fewer for speed).
+        progress_callback: Optional callable(current, total, model_name) for live
+            progress reporting (e.g. updating a Streamlit progress bar).
 
     Returns:
         TrainingResult with leaderboard, fitted models, and best model.
@@ -267,12 +286,16 @@ def train_all_models(
 
     evaluations: list[ModelEvaluation] = []
     fitted_models: dict[str, Any] = {}
+    total_models = len(estimators)
 
-    for name, estimator in estimators.items():
+    for idx, (name, estimator) in enumerate(estimators.items()):
         X_tr = _select_features(name, X_train, X_train_raw)
         X_te = _select_features(name, X_test, X_test_raw)
 
-        logger.info("Training model: %s", name)
+        logger.info("Training model: %s (%d/%d)", name, idx + 1, total_models)
+        if progress_callback is not None:
+            progress_callback(idx, total_models, name)
+
         model = estimator
         model.fit(X_tr, y_train_fit)
 
