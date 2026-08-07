@@ -47,4 +47,4 @@ uploads/
 # Grafana integration
 data/*.db
 grafana-storage/
-grafana/provisioning/datasources/postgres.yaml
+grafana_runtime/
