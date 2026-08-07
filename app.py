@@ -1554,8 +1554,11 @@ def page_grafana() -> None:
         except Exception:
             pass
 
-        grafana_url = st.text_input("Grafana Server URL", value=default_grafana, key="grafana_embed_url")
-        dashboard_url = f"{grafana_url}/d/dataml-analytics?kiosk&refresh=10s"
+        grafana_url = st.text_input("Grafana Server URL", value=default_grafana, key="grafana_embed_url").strip()
+        if "/public-dashboards/" in grafana_url or "/d/" in grafana_url:
+            dashboard_url = grafana_url
+        else:
+            dashboard_url = f"{grafana_url.rstrip('/')}/d/dataml-analytics?kiosk&refresh=10s"
 
         st.warning(
             "💡 **Note on Browser Iframe Security & Grafana:**\n\n"
