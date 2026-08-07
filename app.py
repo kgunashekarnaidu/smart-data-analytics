@@ -696,7 +696,13 @@ def page_eda() -> None:
 
     with tab_corr:
         if len(num_cols) >= 2:
-            top_n = st.slider("Max columns in heatmap", 5, min(30, len(num_cols)), min(15, len(num_cols)))
+            max_cols = min(30, len(num_cols))
+            default_cols = min(15, len(num_cols))
+            if max_cols <= 5:
+                # Too few columns for a slider — just use all of them
+                top_n = max_cols
+            else:
+                top_n = st.slider("Max columns in heatmap", 2, max_cols, default_cols)
             st.plotly_chart(plot_correlation_heatmap(df, num_cols[:top_n]), width="stretch")
         else:
             st.info("Need at least 2 numeric columns for a correlation heatmap.")
