@@ -1548,7 +1548,7 @@ def page_grafana() -> None:
 
     with tab_full:
         grafana_url = st.text_input("Grafana Server URL", value="http://localhost:3000", key="grafana_embed_url")
-        dashboard_url = f"{grafana_url}/d/dataml-analytics/dataml-pro-analytics-dashboard?kiosk&refresh=10s"
+        dashboard_url = f"{grafana_url}/d/dataml-analytics?kiosk&refresh=10s"
 
         st.warning(
             "💡 **Note on Browser Iframe Security & Grafana:**\n\n"
@@ -1567,7 +1567,7 @@ def page_grafana() -> None:
         grafana_url = st.session_state.get("grafana_embed_url", "http://localhost:3000")
         st.caption("Individual Grafana panels (requires running local/cloud Grafana instance).")
 
-        solo_base = f"{grafana_url}/d-solo/dataml-analytics/dataml-pro-analytics-dashboard?orgId=1&kiosk&refresh=10s"
+        solo_base = f"{grafana_url}/d-solo/dataml-analytics?orgId=1&kiosk&refresh=10s"
 
         panel_categories = {
             "🏠 Executive Summary": {
