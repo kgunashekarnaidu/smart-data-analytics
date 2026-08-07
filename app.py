@@ -152,25 +152,43 @@ def init_session_state() -> None:
             st.session_state[key] = default
 
     # Overrides for Cloud Deployment (Streamlit Secrets / ENV vars)
+    # st.secrets throws if no secrets.toml exists, so wrap in try/except
+    def _get_secret(key: str) -> str | None:
+        """Safely read a Streamlit secret, returning None if unavailable."""
+        try:
+            if key in st.secrets:
+                return str(st.secrets[key])
+        except Exception:
+            pass
+        return None
+
     if "PGHOST" in os.environ:
         st.session_state.pg_host = os.environ["PGHOST"]
-    elif hasattr(st, "secrets") and "PGHOST" in st.secrets:
-        st.session_state.pg_host = st.secrets["PGHOST"]
+    else:
+        val = _get_secret("PGHOST")
+        if val:
+            st.session_state.pg_host = val
 
     if "PGUSER" in os.environ:
         st.session_state.pg_user = os.environ["PGUSER"]
-    elif hasattr(st, "secrets") and "PGUSER" in st.secrets:
-        st.session_state.pg_user = st.secrets["PGUSER"]
+    else:
+        val = _get_secret("PGUSER")
+        if val:
+            st.session_state.pg_user = val
 
     if "PGPASSWORD" in os.environ:
         st.session_state.pg_password = os.environ["PGPASSWORD"]
-    elif hasattr(st, "secrets") and "PGPASSWORD" in st.secrets:
-        st.session_state.pg_password = st.secrets["PGPASSWORD"]
+    else:
+        val = _get_secret("PGPASSWORD")
+        if val:
+            st.session_state.pg_password = val
 
     if "PGDATABASE" in os.environ:
         st.session_state.pg_database = os.environ["PGDATABASE"]
-    elif hasattr(st, "secrets") and "PGDATABASE" in st.secrets:
-        st.session_state.pg_database = st.secrets["PGDATABASE"]
+    else:
+        val = _get_secret("PGDATABASE")
+        if val:
+            st.session_state.pg_database = val
 
 
 def reset_pipeline_state() -> None:
